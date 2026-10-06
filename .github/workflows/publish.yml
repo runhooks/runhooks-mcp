@@ -1,0 +1,73 @@
+name: Publish to npm
+
+# Publishes @runhooks/mcp to npm WITH PROVENANCE whenever a version tag (v*) is
+# pushed to this repo. The release mirror pushes that tag only on a version bump,
+# so this runs on bumps — never on ordinary commits. Idempotent: if the version
+# is already on npm, it skips (so re-runs of the same tag are harmless).
+#
+# Auth is npm TRUSTED PUBLISHING (OIDC) — there is NO stored npm token. Configure
+# the trusted publisher once on npmjs.com for the @runhooks/mcp package:
+#   Organization: runhooks · Repository: runhooks-mcp
+#   Workflow filename: publish.yml · Environment: (leave blank, or set & uncomment below)
+# Provenance is generated automatically under trusted publishing.
+#
+# This file is generated into the public mirror repo from the private Runhooks
+# monorepo (mcp/scripts/mirror-publish.yml) — edit it there, not here.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual re-trigger from the Actions tab. Publishes whatever version is in
+  # package.json on the selected ref (skips if that version is already on npm).
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # OIDC: required for npm trusted publishing + provenance
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # If you set an Environment name in npm's trusted-publisher config, match it here:
+    # environment: npm-publish
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing requires npm >= 11.5.1; Node 22 still ships npm 10.x.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Skip if this version is already published
+        id: check
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "@runhooks/mcp@$VERSION" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::@runhooks/mcp@$VERSION is already on npm — skipping publish."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install, build, test
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run build
+          pnpm test
+
+      # No token: npm authenticates via OIDC against the trusted publisher config.
+      # Provenance is attached automatically.
+      - name: Publish (npm trusted publishing)
+        if: steps.check.outputs.publish == 'true'
+        run: npm publish --access public

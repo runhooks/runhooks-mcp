@@ -1,0 +1,61 @@
+{
+  "name": "@runhooks/mcp",
+  "version": "0.1.1",
+  "description": "Model Context Protocol server for Runhooks — let AI agents schedule and manage HTTP webhooks",
+  "license": "MIT",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "runhooks-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "homepage": "https://runhooks.app/docs/mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/runhooks/runhooks-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/runhooks/runhooks-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "runhooks",
+    "cron",
+    "webhook",
+    "scheduler",
+    "ai-agents",
+    "claude",
+    "cursor"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rimraf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "rimraf": "^6.0.1",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
