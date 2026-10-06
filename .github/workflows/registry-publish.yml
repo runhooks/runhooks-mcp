@@ -1,0 +1,41 @@
+name: Publish to MCP Registry
+
+# Publishes this server to the official MCP Registry (registry.modelcontextprotocol.io)
+# using GitHub OIDC — no local tooling, no stored token, no browser login.
+#
+# It works because this repo lives under the `runhooks` org, so the OIDC identity
+# (repository_owner = runhooks) authorizes the `io.github.runhooks/*` namespace in
+# server.json. The manifest is read from ./server.json at the repo root.
+#
+# PREREQUISITE: the npm version referenced in server.json must already be live on
+# npm AND carry a matching `mcpName` field in its package.json (the registry verifies
+# ownership that way). Run this AFTER the npm publish for that version has landed.
+#
+# Generated into the mirror from mcp/scripts/mcp-registry-publish.yml — edit it there.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  id-token: write # OIDC: authenticates to the MCP Registry for the io.github.runhooks namespace
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar -xz mcp-publisher
+
+      - name: Validate manifest
+        run: ./mcp-publisher validate
+
+      - name: Authenticate via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish to the registry
+        run: ./mcp-publisher publish
