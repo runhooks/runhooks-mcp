@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "name": "io.github.runhooks/runhooks-mcp",
+  "description": "Schedule and manage cron jobs and webhooks on Runhooks from your AI agent.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/runhooks/runhooks-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://runhooks.app/docs/mcp",
+  "version": "0.1.2",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@runhooks/mcp",
+      "version": "0.1.2",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "RUNHOOKS_API_KEY",
+          "description": "Runhooks API key (rh_live_...). Required for all tools except provision_account; get one instantly with the provision_account tool, the dashboard, or the CLI.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "RUNHOOKS_API_URL",
+          "description": "API origin override. Defaults to https://api.runhooks.app.",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

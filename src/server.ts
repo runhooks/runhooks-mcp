@@ -11,7 +11,7 @@ import {
 } from './api-contract.js';
 
 const DEFAULT_API_URL = 'https://api.runhooks.app';
-const VERSION = '0.1.1';
+const VERSION = '0.1.2';
 
 type ToolResult = {
   content: { type: 'text'; text: string }[];

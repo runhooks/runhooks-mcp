@@ -1,6 +1,7 @@
 {
   "name": "@runhooks/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "mcpName": "io.github.runhooks/runhooks-mcp",
   "description": "Model Context Protocol server for Runhooks — let AI agents schedule and manage HTTP webhooks",
   "license": "MIT",
   "private": false,
