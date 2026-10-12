@@ -11,7 +11,7 @@ import {
 } from './api-contract.js';
 
 const DEFAULT_API_URL = 'https://api.runhooks.app';
-const VERSION = '0.1.3';
+const VERSION = '0.1.4';
 
 type ToolResult = {
   content: { type: 'text'; text: string }[];
@@ -83,7 +83,13 @@ export function createServer(): McpServer {
   // ── Jobs ─────────────────────────────────────────────────
   server.tool(
     'create_job',
-    'Create a new scheduled job — an HTTP request fired on a cron or interval schedule.',
+    'Create a new scheduled job — an HTTP request fired on a schedule. The schedule.type is one of: ' +
+      '"cron" (schedule.expression is a cron string, optional IANA schedule.timezone), ' +
+      '"interval" (schedule.expression is the number of milliseconds between runs, as a string), or ' +
+      '"once" for a single future run (schedule.expression is an ISO-8601 date-time — either an absolute ' +
+      'instant like "2026-12-25T14:00:00Z"/with offset, or a naive wall-clock time like "2026-12-25T09:00:00" ' +
+      'interpreted in schedule.timezone, defaulting to UTC; the time must be in the future). One-off jobs ' +
+      'support the same retries, alerts and logs as recurring jobs.',
     createJobSchema.shape,
     async (args) => run(() => client().createJob(args as CreateJobInput)),
   );

@@ -25,7 +25,7 @@ export type PlanTier = 'free' | 'starter' | 'production' | 'growth';
 
 export type JobStatus = 'active' | 'paused' | 'completed' | 'failed';
 
-export type ScheduleType = 'cron' | 'interval';
+export type ScheduleType = 'cron' | 'interval' | 'once';
 
 export type ExecutionStatus =
   | 'pending'
@@ -53,7 +53,7 @@ export interface HttpConfig {
 
 export interface Schedule {
   type: ScheduleType;
-  expression: string; // cron expression or interval in ms
+  expression: string; // cron expression, interval in ms, or ISO-8601 date-time (once)
   timezone?: string;
 }
 
@@ -275,7 +275,7 @@ export function validateUrlForSSRF(urlString: string): UrlValidationResult {
 
 export const httpMethodSchema = z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
 export const jobStatusSchema = z.enum(['active', 'paused', 'completed', 'failed']);
-export const scheduleTypeSchema = z.enum(['cron', 'interval']);
+export const scheduleTypeSchema = z.enum(['cron', 'interval', 'once']);
 
 export const retryPolicySchema = z.object({
   maxRetries: z.number().int().min(0).max(10).default(3),
