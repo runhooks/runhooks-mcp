@@ -1,15 +1,18 @@
-name: Publish to MCP Registry
+name: Publish to MCP Registry (manual fallback)
 
-# Publishes this server to the official MCP Registry (registry.modelcontextprotocol.io)
-# using GitHub OIDC — no local tooling, no stored token, no browser login.
+# MANUAL FALLBACK. The normal path publishes the MCP Registry automatically from
+# the `publish.yml` workflow on each version tag (npm first, then registry). Use
+# this only to (re)publish the registry entry out of band — e.g. a version that
+# reached npm but whose registry publish was missed.
 #
-# It works because this repo lives under the `runhooks` org, so the OIDC identity
-# (repository_owner = runhooks) authorizes the `io.github.runhooks/*` namespace in
-# server.json. The manifest is read from ./server.json at the repo root.
+# IMPORTANT: this publishes whatever `server.json` is on the ref you dispatch it
+# against. Run it against the VERSION TAG (e.g. `v0.1.5`), not a branch, so the
+# version is pinned — dispatching against a branch mid-release can publish a
+# stale version (which the registry then rejects as a "duplicate").
 #
-# PREREQUISITE: the npm version referenced in server.json must already be live on
-# npm AND carry a matching `mcpName` field in its package.json (the registry verifies
-# ownership that way). Run this AFTER the npm publish for that version has landed.
+# PREREQUISITE: the npm version in server.json must already be live on npm and
+# carry a matching `mcpName` in package.json (the registry verifies ownership
+# that way).
 #
 # Generated into the mirror from mcp/scripts/mcp-registry-publish.yml — edit it there.
 
@@ -37,5 +40,18 @@ jobs:
       - name: Authenticate via GitHub OIDC
         run: ./mcp-publisher login github-oidc
 
+      # Idempotent: a "duplicate version" response means this version is already
+      # in the registry — treat that as success so re-runs are harmless.
       - name: Publish to the registry
-        run: ./mcp-publisher publish
+        run: |
+          set +e
+          OUT=$(./mcp-publisher publish 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ "$CODE" -ne 0 ]; then
+            if echo "$OUT" | grep -qi "duplicate version"; then
+              echo "::notice::This version is already in the MCP Registry — nothing to do."
+              exit 0
+            fi
+            exit "$CODE"
+          fi
