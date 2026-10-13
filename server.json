@@ -2,19 +2,19 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.runhooks/runhooks-mcp",
   "title": "Runhooks",
-  "description": "Schedule and manage cron jobs and webhooks on Runhooks from your AI agent.",
+  "description": "Schedule and manage recurring and one-off HTTP jobs on Runhooks from your AI agent.",
   "repository": {
     "url": "https://github.com/runhooks/runhooks-mcp",
     "source": "github"
   },
   "websiteUrl": "https://runhooks.app/docs/mcp",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@runhooks/mcp",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         {

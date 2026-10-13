@@ -2,7 +2,7 @@
 
 Model Context Protocol (MCP) server for [Runhooks](https://runhooks.app) — reliable HTTP
 scheduling infrastructure. It lets AI agents (Claude Desktop, Cursor, and any MCP client)
-schedule and manage cron jobs and webhooks directly.
+schedule and manage recurring and one-off HTTP jobs directly.
 
 The server runs **locally** on your machine: your MCP client spawns it with `npx` and it talks
 to the Runhooks REST API over HTTPS. There is no hosted service — just this package.
