@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { RunhooksClient, publicRequest, ApiError } from './client.js';
@@ -11,7 +12,13 @@ import {
 } from './api-contract.js';
 
 const DEFAULT_API_URL = 'https://api.runhooks.app';
-const VERSION = '0.1.6';
+// Single source of truth for the version: package.json. Read at runtime so the
+// number is never duplicated here. The path resolves to the package root both in
+// dev (tsx src/index.ts) and when bundled (dist/index.js) — each sits one level
+// under the package root — and package.json always ships in the npm tarball.
+// (server.json carries its own copy because the MCP Registry schema requires an
+// explicit version; scripts/sync-version.mjs keeps it in step with package.json.)
+const VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 
 type ToolResult = {
   content: { type: 'text'; text: string }[];
