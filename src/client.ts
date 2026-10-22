@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { API_PREFIX } from './api-contract.js';
 import type {
   ApiResponse,
@@ -13,6 +14,16 @@ import type {
   UpdateAlertConfigInput,
   UpgradeAccountInput,
 } from './api-contract.js';
+
+// Identify the MCP server on every request: User-Agent surfaces in the API's
+// access logs, and X-Runhooks-Source lets the API attribute created jobs to
+// this channel. Version read from package.json (resolves in dev and bundled).
+const CLIENT_VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
+const CLIENT_HEADERS: Record<string, string> = {
+  'User-Agent': `runhooks-mcp/${CLIENT_VERSION}`,
+  'X-Runhooks-Source': 'mcp',
+};
+
 /** Minimal connection config — the MCP server reads these from env. */
 export interface ClientConfig {
   apiUrl: string;
@@ -33,6 +44,8 @@ export class ApiError extends Error {
 export class RunhooksClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  /** Non-blocking advisories from the most recent request (e.g. plan-limit warnings). */
+  public lastWarnings: string[] = [];
 
   constructor(config: ClientConfig) {
     this.baseUrl = config.apiUrl.replace(/\/$/, '') + API_PREFIX;
@@ -49,6 +62,7 @@ export class RunhooksClient {
       response = await fetch(url, {
         ...init,
         headers: {
+          ...CLIENT_HEADERS,
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`,
           ...(init.headers ?? {}),
@@ -74,6 +88,7 @@ export class RunhooksClient {
       throw new ApiError(errorMessage, response.status, body);
     }
 
+    this.lastWarnings = [];
     const apiResponse = body as ApiResponse<T>;
     if (apiResponse && typeof apiResponse === 'object' && 'success' in apiResponse) {
       if (!apiResponse.success) {
@@ -83,6 +98,7 @@ export class RunhooksClient {
           body
         );
       }
+      this.lastWarnings = apiResponse.warnings ?? [];
       return apiResponse.data as T;
     }
     return body as T;
@@ -230,6 +246,7 @@ export async function publicRequest<T>(apiUrl: string, path: string, init?: Requ
     response = await fetch(url, {
       ...init,
       headers: {
+        ...CLIENT_HEADERS,
         'Content-Type': 'application/json',
         ...(init?.headers ?? {}),
       },

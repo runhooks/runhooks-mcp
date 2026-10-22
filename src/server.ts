@@ -22,6 +22,13 @@ const DEFAULT_API_URL = 'https://api.runhooks.app';
 // explicit version; scripts/sync-version.mjs keeps it in step with package.json.)
 const VERSION = (createRequire(import.meta.url)('../package.json') as { version: string }).version;
 
+// Nudge shown to anonymous accounts: they receive no failure alerts because
+// there's no email on file. Phrased so an AI assistant can relay the what + why.
+const ANON_ALERT_TIP =
+  "Heads up: this is an anonymous account, so Runhooks can't email you if a job starts failing " +
+  '(anonymous accounts receive no failure alerts). To get alerted, add an email by completing ' +
+  'registration — via the `runhooks upgrade` CLI or the Runhooks web app.';
+
 type ToolResult = {
   content: { type: 'text'; text: string }[];
   isError?: boolean;
@@ -57,6 +64,9 @@ export function createServer(): McpServer {
   // rewrite; a file-supplied (or freshly provisioned) key we own. This governs
   // whether rotation persists silently or has to warn the user.
   let keyFromEnv = Boolean(process.env.RUNHOOKS_API_KEY);
+  // Cached anonymity of the active account (null = unknown). Set by
+  // provision_account/whoami so create_job can nudge without an extra request.
+  let sessionAnonymous: boolean | null = null;
 
   const server = new McpServer({ name: 'runhooks', version: VERSION });
 
@@ -88,26 +98,30 @@ export function createServer(): McpServer {
       // Already authenticated → return the existing account, never a new one.
       if (apiKey) {
         const account = await client().getMe();
+        sessionAnonymous = account.isAnonymous ?? null;
         return {
           reused: true,
           message:
             'This MCP server already has an account configured, so no new account was created. ' +
             'To use a different account, set a different RUNHOOKS_API_KEY in the server config.',
           account,
+          ...(sessionAnonymous ? { tip: ANON_ALERT_TIP } : {}),
         };
       }
       const result = await publicRequest<{ user: User; apiKey: string }>(
         apiUrl,
         '/auth/register-anonymous',
-        { method: 'POST', body: JSON.stringify(name ? { name } : {}) },
+        { method: 'POST', body: JSON.stringify({ ...(name ? { name } : {}), source: 'mcp' }) },
       );
       adoptKey(result.apiKey);
+      sessionAnonymous = true; // freshly provisioned accounts are always anonymous
       return {
         created: true,
         message:
           `Account created and the API key was saved to ${getConfigPath()}. ` +
           'It is active for every tool right now — no restart needed, and no need to call provision_account again. ' +
           'For portability across machines you may also set this key as RUNHOOKS_API_KEY in the server config.',
+        tip: ANON_ALERT_TIP,
         ...result,
       };
     }),
@@ -117,7 +131,11 @@ export function createServer(): McpServer {
     'whoami',
     'Show the currently authenticated Runhooks account (name, plan, API key prefix).',
     {},
-    async () => run(() => client().getMe()),
+    async () => run(async () => {
+      const account = await client().getMe();
+      sessionAnonymous = account.isAnonymous ?? null;
+      return sessionAnonymous ? { ...account, tip: ANON_ALERT_TIP } : account;
+    }),
   );
 
   server.tool(
@@ -155,7 +173,14 @@ export function createServer(): McpServer {
       'interpreted in schedule.timezone, defaulting to UTC; the time must be in the future). One-off jobs ' +
       'support the same retries, alerts and logs as recurring jobs.',
     createJobSchema.shape,
-    async (args) => run(() => client().createJob(args as CreateJobInput)),
+    async (args) => run(async () => {
+      const c = client();
+      const job = await c.createJob(args as CreateJobInput);
+      const result: Record<string, unknown> = { ...job };
+      if (c.lastWarnings.length) result.warnings = c.lastWarnings;
+      if (sessionAnonymous === true) result.tip = ANON_ALERT_TIP;
+      return result;
+    }),
   );
 
   server.tool(
@@ -182,7 +207,11 @@ export function createServer(): McpServer {
     'update_job',
     'Update an existing job. Only the fields you provide are changed.',
     { id: z.string(), ...updateJobSchema.shape },
-    async ({ id, ...input }) => run(() => client().updateJob(id, input as UpdateJobInput)),
+    async ({ id, ...input }) => run(async () => {
+      const c = client();
+      const job = await c.updateJob(id, input as UpdateJobInput);
+      return c.lastWarnings.length ? { ...job, warnings: c.lastWarnings } : job;
+    }),
   );
 
   server.tool(

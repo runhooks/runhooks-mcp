@@ -204,6 +204,7 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
   message?: string;
+  warnings?: string[];
 }
 
 // ── SSRF-safe URL check (copied from @runhooks/shared url-validation.ts) ──────
