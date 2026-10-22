@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { RunhooksClient, publicRequest, ApiError } from './client.js';
+import { readStoredConfig, writeStoredConfig, getConfigPath } from './config.js';
 import {
   createJobSchema,
   updateJobSchema,
@@ -9,6 +10,7 @@ import {
   type UpdateJobInput,
   type CreateAlertConfigInput,
   type UpdateAlertConfigInput,
+  type User,
 } from './api-contract.js';
 
 const DEFAULT_API_URL = 'https://api.runhooks.app';
@@ -44,8 +46,17 @@ async function run(fn: () => Promise<unknown>): Promise<ToolResult> {
 }
 
 export function createServer(): McpServer {
-  const apiUrl = (process.env.RUNHOOKS_API_URL || DEFAULT_API_URL).replace(/\/$/, '');
-  const apiKey = process.env.RUNHOOKS_API_KEY || '';
+  // Resolve credentials once at startup: env vars win, then any key persisted
+  // by a previous provision (or by the CLI). Both live in `let` bindings so a
+  // key provisioned or rotated mid-session takes effect on the very next tool
+  // call — the key is never re-captured per request, but it IS mutable.
+  const stored = readStoredConfig();
+  const apiUrl = (process.env.RUNHOOKS_API_URL || stored?.apiUrl || DEFAULT_API_URL).replace(/\/$/, '');
+  let apiKey = process.env.RUNHOOKS_API_KEY || stored?.apiKey || '';
+  // An env-supplied key lives in the client's MCP config, which we cannot
+  // rewrite; a file-supplied (or freshly provisioned) key we own. This governs
+  // whether rotation persists silently or has to warn the user.
+  let keyFromEnv = Boolean(process.env.RUNHOOKS_API_KEY);
 
   const server = new McpServer({ name: 'runhooks', version: VERSION });
 
@@ -53,24 +64,53 @@ export function createServer(): McpServer {
   function client(): RunhooksClient {
     if (!apiKey) {
       throw new ApiError(
-        'No RUNHOOKS_API_KEY set. Run the "provision_account" tool to create an instant account (no email required), then set the returned apiKey as RUNHOOKS_API_KEY in your MCP client config.',
+        'No Runhooks API key configured. If you already have an account, set its key as RUNHOOKS_API_KEY in this MCP server\'s config. Otherwise call "provision_account" ONCE — it creates an account and saves the key locally, so every later tool works without re-provisioning. Do NOT call provision_account again to recover from an auth error; it only makes duplicate accounts.',
         401,
       );
     }
     return new RunhooksClient({ apiUrl, apiKey });
   }
 
+  // Adopt a new key for the rest of this session and persist it so restarts
+  // (and the CLI) reuse the same account instead of creating another.
+  function adoptKey(newKey: string): void {
+    apiKey = newKey;
+    keyFromEnv = false;
+    writeStoredConfig({ apiUrl, apiKey: newKey });
+  }
+
   // ── Account ──────────────────────────────────────────────
   server.tool(
     'provision_account',
-    'Create a new anonymous Runhooks account (no email required) and return an API key. Save the returned apiKey and set it as RUNHOOKS_API_KEY to use every other tool.',
+    'Create a new anonymous Runhooks account (no email required) and save its API key locally for reuse. Idempotent: if this server already has a key (from RUNHOOKS_API_KEY or a previous provision), it returns the EXISTING account instead of creating a duplicate. Call this at most once — never to recover from an auth error.',
     { name: z.string().optional().describe('Optional display name for the account') },
-    async ({ name }) => run(() =>
-      publicRequest(apiUrl, '/auth/register-anonymous', {
-        method: 'POST',
-        body: JSON.stringify(name ? { name } : {}),
-      }),
-    ),
+    async ({ name }) => run(async () => {
+      // Already authenticated → return the existing account, never a new one.
+      if (apiKey) {
+        const account = await client().getMe();
+        return {
+          reused: true,
+          message:
+            'This MCP server already has an account configured, so no new account was created. ' +
+            'To use a different account, set a different RUNHOOKS_API_KEY in the server config.',
+          account,
+        };
+      }
+      const result = await publicRequest<{ user: User; apiKey: string }>(
+        apiUrl,
+        '/auth/register-anonymous',
+        { method: 'POST', body: JSON.stringify(name ? { name } : {}) },
+      );
+      adoptKey(result.apiKey);
+      return {
+        created: true,
+        message:
+          `Account created and the API key was saved to ${getConfigPath()}. ` +
+          'It is active for every tool right now — no restart needed, and no need to call provision_account again. ' +
+          'For portability across machines you may also set this key as RUNHOOKS_API_KEY in the server config.',
+        ...result,
+      };
+    }),
   );
 
   server.tool(
@@ -82,16 +122,33 @@ export function createServer(): McpServer {
 
   server.tool(
     'rotate_key',
-    'Rotate the API key. The old key stops working immediately; the new key is returned.',
+    'Rotate the API key. The old key stops working immediately; the new key is returned, saved locally, and used for the rest of this session.',
     {},
-    async () => run(() => client().rotateApiKey()),
+    async () => run(async () => {
+      const result = await client().rotateApiKey();
+      if (keyFromEnv) {
+        // We can't edit the client's RUNHOOKS_API_KEY; keep the session alive
+        // on the new key but make the stale-config risk explicit.
+        apiKey = result.apiKey;
+        return {
+          ...result,
+          warning:
+            'The rotated key is active for this session, but your key was supplied via RUNHOOKS_API_KEY, ' +
+            'which this server cannot edit. Update RUNHOOKS_API_KEY to the new key (the old one no longer works) ' +
+            'or the next restart will fail to authenticate.',
+        };
+      }
+      adoptKey(result.apiKey);
+      return { ...result, message: `New key saved to ${getConfigPath()}.` };
+    }),
   );
 
   // ── Jobs ─────────────────────────────────────────────────
   server.tool(
     'create_job',
     'Create a new scheduled job — an HTTP request fired on a schedule. The schedule.type is one of: ' +
-      '"cron" (schedule.expression is a cron string, optional IANA schedule.timezone), ' +
+      '"cron" (schedule.expression is a cron string, e.g. "0 9 * * 1,4" for every Monday & Thursday at ' +
+      '09:00 — build/preview expressions at https://runhooks.app/tools/cron-expression-builder; optional IANA schedule.timezone), ' +
       '"interval" (schedule.expression is the number of milliseconds between runs, as a string), or ' +
       '"once" for a single future run (schedule.expression is an ISO-8601 date-time — either an absolute ' +
       'instant like "2026-12-25T14:00:00Z"/with offset, or a naive wall-clock time like "2026-12-25T09:00:00" ' +

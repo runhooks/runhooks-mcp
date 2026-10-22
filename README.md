@@ -23,9 +23,11 @@ Add it to your MCP client config. For Claude Desktop (`claude_desktop_config.jso
 }
 ```
 
-No API key yet? Leave `env` out and ask the agent to run the **`provision_account`** tool — it
-creates an instant account (no email) and returns an `rh_live_...` key. Save that key as
-`RUNHOOKS_API_KEY` and restart your client.
+No API key yet? Leave `env` out and ask the agent to run the **`provision_account`** tool **once** — it
+creates an instant account (no email), returns an `rh_live_...` key, and saves it locally to
+`~/.runhooks/mcp.json`. The key is reused automatically from then on, so every other tool works
+immediately with no restart and no need to provision again. (Setting `RUNHOOKS_API_KEY` is still the
+most portable option across machines, and it always takes precedence over the saved key.)
 
 ## Verify
 
@@ -40,7 +42,7 @@ RUNHOOKS_API_KEY=rh_live_... npx -y @runhooks/mcp
 
 | Variable | Description | Default |
 |---|---|---|
-| `RUNHOOKS_API_KEY` | Your API key (`rh_live_...`). Required for all tools except `provision_account`. | — |
+| `RUNHOOKS_API_KEY` | Your API key (`rh_live_...`). Optional — `provision_account` saves a key locally if unset. Takes precedence over the saved key. | — |
 | `RUNHOOKS_API_URL` | API origin. | `https://api.runhooks.app` |
 
 ## Tools
